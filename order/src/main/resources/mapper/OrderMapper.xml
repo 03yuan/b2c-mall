@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ysh.order.dao.OrderMapper">
+
+    <insert id="insert" parameterType="com.ysh.order.dao.po.OrderPO" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO tb_order (order_no, shop_id, sku_id, sku_name, quantity, total_price,
+                              status, receiver_name, receiver_phone, receiver_address)
+        VALUES (#{orderNo}, #{shopId}, #{skuId}, #{skuName}, #{quantity}, #{totalPrice},
+                #{status}, #{receiverName}, #{receiverPhone}, #{receiverAddress})
+    </insert>
+
+    <select id="selectById" resultType="com.ysh.order.dao.po.OrderPO">
+        SELECT id, order_no, shop_id, sku_id, sku_name, quantity, total_price,
+               status, pay_type, receiver_name, receiver_phone, receiver_address,
+               create_time, update_time
+        FROM tb_order
+        WHERE id = #{id}
+    </select>
+
+    <update id="updateStatus">
+        UPDATE tb_order
+        SET status = #{status},
+            <if test="payType != null">
+                pay_type = #{payType},
+            </if>
+            update_time = datetime('now', 'localtime')
+        WHERE id = #{id}
+    </update>
+
+</mapper>

@@ -1,0 +1,38 @@
+server:
+  port: 8085
+
+spring:
+  application:
+    name: order-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 47.100.22.158:8848
+        namespace: yuansuheng
+        username: nacos
+        password: njuit2026aA
+      config:
+        server-addr: 47.100.22.158:8848
+        namespace: yuansuheng
+        username: nacos
+        password: njuit2026aA
+        file-extension: yml
+  datasource:
+    driver-class-name: org.sqlite.JDBC
+    url: jdbc:sqlite:C:/Users/白鸽/Desktop/b2c/order.db
+  redis:
+    host: 47.100.22.158
+    port: 6379
+    timeout: 5000ms
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true

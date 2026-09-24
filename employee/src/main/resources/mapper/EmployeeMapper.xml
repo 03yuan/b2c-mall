@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ysh.b2cmall.employee.dao.mapper.EmployeeMapper">
+
+    <resultMap id="EmployeeResultMap" type="com.ysh.b2cmall.employee.dao.po.EmployeePO">
+        <id property="id" column="id"/>
+        <result property="shopId" column="shop_id"/>
+        <result property="username" column="username"/>
+        <result property="password" column="password"/>
+        <result property="avatarUrl" column="avatar_url"/>
+        <result property="lastLoginTime" column="last_login_time"/>
+        <result property="loginCount" column="login_count"/>
+        <result property="status" column="status"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <insert id="save" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO tb_employee (shop_id, username, password, avatar_url, status)
+        VALUES (#{shopId}, #{username}, #{password}, #{avatarUrl}, #{status})
+    </insert>
+
+    <select id="selectById" resultMap="EmployeeResultMap">
+        SELECT * FROM tb_employee WHERE id = #{id}
+    </select>
+
+    <select id="selectByShopId" resultMap="EmployeeResultMap">
+        SELECT * FROM tb_employee WHERE shop_id = #{shopId}
+    </select>
+
+    <select id="selectByUsernameAndShopId" resultMap="EmployeeResultMap">
+        SELECT * FROM tb_employee WHERE username = #{username} AND shop_id = #{shopId}
+    </select>
+
+    <update id="updateStatus">
+        UPDATE tb_employee SET status = #{status}, updated_at = CURRENT_TIMESTAMP WHERE shop_id = #{shopId}
+    </update>
+
+    <!-- 用户状态观察者用：更新最后登录时间 + 累计登录次数 -->
+    <update id="updateLoginInfo">
+        UPDATE tb_employee
+        SET last_login_time = CURRENT_TIMESTAMP,
+            login_count     = login_count + 1,
+            updated_at      = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+
+    <!-- 审计日志观察者用：写 tb_login_logs（成功失败都写） -->
+    <insert id="saveLoginLog">
+        INSERT INTO tb_login_logs (user_id, login_ip, login_device, login_location, user_agent, status)
+        VALUES (#{userId}, #{ip}, #{device}, #{location}, #{userAgent}, #{status})
+    </insert>
+
+</mapper>

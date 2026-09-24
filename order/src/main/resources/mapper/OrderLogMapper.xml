@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ysh.order.dao.OrderLogMapper">
+
+    <insert id="insert" parameterType="com.ysh.order.dao.po.OrderLogPO" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO tb_order_log (order_id, from_status, to_status, event, operator_id, remark)
+        VALUES (#{orderId}, #{fromStatus}, #{toStatus}, #{event}, #{operatorId}, #{remark})
+    </insert>
+
+</mapper>

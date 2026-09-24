@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ysh.b2cmall.shop.dao.mapper.MessageMapper">
+
+    <resultMap id="MessageResultMap" type="com.ysh.b2cmall.shop.dao.po.MessagePO">
+        <id property="id" column="id"/>
+        <result property="shopId" column="shop_id"/>
+        <result property="senderId" column="sender_id"/>
+        <result property="title" column="title"/>
+        <result property="content" column="content"/>
+        <result property="msgType" column="msg_type"/>
+        <result property="isRead" column="is_read"/>
+        <result property="readTime" column="read_time"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <insert id="save" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO tb_messages (shop_id, sender_id, title, content, msg_type, is_read, created_at, updated_at)
+        VALUES (#{shopId}, #{senderId}, #{title}, #{content}, #{msgType}, #{isRead}, #{createdAt}, #{updatedAt})
+    </insert>
+
+    <select id="selectByShopId" resultMap="MessageResultMap">
+        SELECT * FROM tb_messages WHERE shop_id = #{shopId} ORDER BY created_at DESC
+    </select>
+
+</mapper>

@@ -1,0 +1,56 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 47.100.22.158:8848
+        namespace: yuansuheng
+        username: nacos
+        password: njuit2026aA
+      config:
+        server-addr: 47.100.22.158:8848
+        namespace: yuansuheng
+        username: nacos
+        password: njuit2026aA
+        file-extension: yml
+    gateway:
+      routes:
+        - id: shop-service
+          uri: lb://shop-service
+          predicates:
+            - Path=/shop/**
+        - id: employee-service
+          uri: lb://employee-service
+          predicates:
+            - Path=/employee/**
+        - id: product-service
+          uri: lb://product-service
+          predicates:
+            - Path=/product/**
+        - id: order-service
+          uri: lb://order-service
+          predicates:
+            - Path=/order/**
+  redis:
+    host: 47.100.22.158
+    port: 6379
+    timeout: 5000ms
+
+# 网关鉴权自定义配置
+b2c:
+  auth:
+    # 白名单路径（无需登录即可访问），支持 Ant 风格（* 匹配单层、** 匹配多层）
+    white-urls:
+      - /shop/register
+      - /shop/login
+      - /employee/save
+      - /employee/login
+      - /product/create
+      - /order/create
+      - /swagger-ui.html
+      - /swagger-ui/**
+      - /v3/api-docs/**

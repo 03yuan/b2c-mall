@@ -1,0 +1,38 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: employee-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 47.100.22.158:8848
+        namespace: yuansuheng
+        username: nacos
+        password: njuit2026aA
+      config:
+        server-addr: 47.100.22.158:8848
+        namespace: yuansuheng
+        username: nacos
+        password: njuit2026aA
+        file-extension: yml
+  datasource:
+    driver-class-name: org.sqlite.JDBC
+    # employee 服务独立库（绝对路径，避免不同启动目录下误建空库）
+    url: jdbc:sqlite:C:/Users/白鸽/Desktop/b2c/employee.db
+  redis:
+    host: 47.100.22.158
+    port: 6379
+    timeout: 5000ms
+    # 如果 Redis 配了密码，在这里补上 password: xxx
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
