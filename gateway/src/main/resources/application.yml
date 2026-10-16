@@ -35,6 +35,10 @@ spring:
           uri: lb://order-service
           predicates:
             - Path=/order/**
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/user/**
   redis:
     host: 47.100.22.158
     port: 6379
@@ -51,6 +55,7 @@ b2c:
       - /employee/login
       - /product/create
       - /order/create
+      - /user/login
       - /swagger-ui.html
       - /swagger-ui/**
       - /v3/api-docs/**
