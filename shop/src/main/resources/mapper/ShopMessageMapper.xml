@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ysh.b2cmall.shop.dao.mapper.ShopMessageMapper">
+
+    <resultMap id="ShopMessageResultMap" type="com.ysh.b2cmall.shop.dao.po.ShopMessagePO">
+        <id property="id" column="id"/>
+        <result property="shopId" column="shop_id"/>
+        <result property="type" column="type"/>
+        <result property="content" column="content"/>
+        <result property="orderId" column="order_id"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO tb_shop_message (shop_id, type, content, order_id)
+        VALUES (#{shopId}, #{type}, #{content}, #{orderId})
+    </insert>
+
+    <!-- 消息分页查询：按时间倒序（id 倒序兜底同秒），仅查指定店铺 -->
+    <select id="selectPageByShopId" resultMap="ShopMessageResultMap">
+        SELECT * FROM tb_shop_message
+        WHERE shop_id = #{shopId}
+        ORDER BY created_at DESC, id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+</mapper>

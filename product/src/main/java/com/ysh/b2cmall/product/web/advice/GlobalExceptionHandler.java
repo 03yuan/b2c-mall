@@ -9,6 +9,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import javax.validation.ConstraintViolationException;
 
@@ -39,6 +40,16 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
+    /** 参数类型不匹配（如分页参数传非数字）：按 400 返回中文原因，而非笼统 500 */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<BaseResponseVO<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        String name = ex.getName();
+        String message = ("page".equals(name) || "size".equals(name))
+                ? "分页参数格式不正确（" + name + " 必须为整数）"
+                : "请求参数格式不正确（" + name + "）";
+        return build(HttpStatus.BAD_REQUEST, message);
+    }
+
     /** 业务校验异常（Assert、手动抛出）：含“不存在”按 404，其余按 400 */
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<BaseResponseVO<Void>> handleIllegalArg(IllegalArgumentException ex) {
@@ -46,6 +57,14 @@ public class GlobalExceptionHandler {
         HttpStatus status = (msg != null && msg.contains("不存在"))
                 ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST;
         return build(status, msg);
+    }
+
+    /** 下游服务不可用（功能上下文 7.3.4）：503，关键操作宁可拒绝也不放行 */
+    @ExceptionHandler(com.ysh.b2cmall.product.service.DownstreamServiceException.class)
+    public ResponseEntity<BaseResponseVO<Void>> handleDownstream(
+            com.ysh.b2cmall.product.service.DownstreamServiceException ex) {
+        log.warn("下游服务不可用：{}", ex.getMessage());
+        return build(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
     }
 
     /** 兜底：真正的系统故障才是 500，打印堆栈便于排查 */

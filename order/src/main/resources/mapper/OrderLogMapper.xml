@@ -8,4 +8,12 @@
         VALUES (#{orderId}, #{fromStatus}, #{toStatus}, #{event}, #{operatorId}, #{remark})
     </insert>
 
+    <!-- 按订单 id 查询状态流转日志（按 id 升序，即时间升序，shop-order-list.md 功能上下文 9.1.1） -->
+    <select id="selectByOrderId" resultType="com.ysh.order.dao.po.OrderLogPO">
+        SELECT id, order_id, from_status, to_status, event, operator_id, remark, create_time
+        FROM tb_order_log
+        WHERE order_id = #{orderId}
+        ORDER BY id ASC
+    </select>
+
 </mapper>

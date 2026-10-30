@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.ysh.order.dao.RefundMapper">
+
+    <!-- 行 VO 售后状态批量派生（shop-order-list.md 6.1.4）：一次查回本页全部订单的退款单据，
+         id DESC 保证同一订单多条退款单时首条即最新 -->
+    <select id="selectByOrderIds" resultType="com.ysh.order.dao.po.RefundPO">
+        SELECT id, order_id, shop_id, status, amount, create_time
+        FROM tb_refund
+        WHERE order_id IN
+        <foreach collection="orderIds" item="orderId" open="(" separator="," close=")">
+            #{orderId}
+        </foreach>
+        ORDER BY id DESC
+    </select>
+
+</mapper>

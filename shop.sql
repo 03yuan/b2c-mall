@@ -32,3 +32,22 @@ CREATE TABLE IF NOT EXISTS tb_messages
 );
 
 CREATE INDEX idx_messages_shop_id ON tb_messages (shop_id);
+
+-- ============================================
+-- 店铺消息表（订单事件消费落库，Dashboard 消息通知用）
+-- schema 变更需先删旧表重建（SQLite CREATE IF NOT EXISTS 不改表）
+-- ============================================
+DROP TABLE IF EXISTS tb_shop_message;
+
+CREATE TABLE IF NOT EXISTS tb_shop_message
+(
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    shop_id    INTEGER      NOT NULL,                  -- 店铺ID
+    type       VARCHAR(20)  NOT NULL,                  -- 事件类型：PAY_SUCCESS/REFUND_APPLY/CONFIRM_RECEIPT
+    content    VARCHAR(500) NOT NULL,                  -- 消息文本（固定模板拼出，逐字不得漂移）
+    order_id   INTEGER      NOT NULL,                  -- 关联订单ID（前端点击跳订单详情）
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 组合索引：支撑消息倒序分页查询走索引，防止深翻页越翻越慢（6.2.2）
+CREATE INDEX idx_shop_message_shop_created ON tb_shop_message (shop_id, created_at);

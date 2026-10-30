@@ -1,6 +1,7 @@
 package com.ysh.b2cmall.user.web.advice;
 
 import com.ysh.b2cmall.common.response.BaseResponseVO;
+import com.ysh.b2cmall.user.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,19 +19,18 @@ public class GlobalExceptionHandler {
     public ResponseEntity<BaseResponseVO<Void>> handleBodyValid(MethodArgumentNotValidException ex) {
         StringBuilder sb = new StringBuilder();
         for (FieldError error : ex.getBindingResult().getFieldErrors()) {
-            sb.append(error.getDefaultMessage());
-            break;
+            sb.append(error.getDefaultMessage()).append("; ");
         }
         return build(HttpStatus.BAD_REQUEST, sb.toString());
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<BaseResponseVO<Void>> handleJsonParse(HttpMessageNotReadableException ex) {
-        return build(HttpStatus.BAD_REQUEST, "请求参数格式错误");
+    public ResponseEntity<BaseResponseVO<Void>> handleNotReadable(HttpMessageNotReadableException ex) {
+        return build(HttpStatus.BAD_REQUEST, "请求体格式错误");
     }
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<BaseResponseVO<Void>> handleIllegalArg(IllegalArgumentException ex) {
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<BaseResponseVO<Void>> handleBusiness(BusinessException ex) {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 

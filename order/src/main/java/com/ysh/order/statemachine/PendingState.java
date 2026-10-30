@@ -23,6 +23,11 @@ public class PendingState implements OrderState {
     }
 
     @Override
+    public OrderState cancel() {
+        return new FailedState();
+    }
+
+    @Override
     public OrderStatusEnum getStatus() {
         return OrderStatusEnum.PENDING;
     }

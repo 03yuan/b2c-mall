@@ -17,6 +17,9 @@ public interface OrderState {
     /** 确认收货：SHIPPED -> COMPLETED */
     OrderState confirm();
 
+    /** 取消：仅 PENDING -> FAILED；已付款及之后的流转须走退款，不允许取消 */
+    OrderState cancel();
+
     /** 获取当前状态枚举（用于DB映射） */
     OrderStatusEnum getStatus();
 }

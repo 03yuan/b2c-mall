@@ -20,4 +20,19 @@
         SELECT * FROM tb_category WHERE status = 1 ORDER BY sort ASC
     </select>
 
+    <!-- 商品分类下拉（功能上下文 3.3）：只取本店启用类目，sort 升序（id 兜底保证稳定顺序） -->
+    <select id="selectEnabledByShopId" resultMap="CategoryResultMap">
+        SELECT * FROM tb_category
+        WHERE shop_id = #{shopId} AND status = 1
+        ORDER BY sort ASC, id ASC
+    </select>
+
+    <!-- C 端分类导航（功能上下文 1.1）：全平台一级分类名，跨店按名去重，排序稳定 -->
+    <select id="selectMallTopLevelNames" resultType="string">
+        SELECT name FROM tb_category
+        WHERE parent_id = 0 AND status = 1
+        GROUP BY name
+        ORDER BY MAX(sort) ASC, name ASC
+    </select>
+
 </mapper>

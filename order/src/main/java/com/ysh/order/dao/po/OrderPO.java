@@ -16,6 +16,22 @@ public class OrderPO {
     private BigDecimal totalPrice;
     private String status;
     private String payType;
+    /** 支付时间（SQLite 存字符串，NULL 安全；详情组装时解析为 LocalDateTime） */
+    private String payTime;
+    private String orderType;
+    private String orderCategory;
+    private String logisticsType;
+    private String logisticsNo;
+    private String storeName;
+    private String shopName;
+    /** 店铺电话（下单快照冗余，电话图标数据源；可空，null 输出空串） */
+    private String shopPhone;
+    private String skuImage;
+    private BigDecimal unitPrice;
+    private Integer isGift;
+    private Integer buyerDeleted;
+    private Integer buyerFav;
+    private String buyerUsername;
     private String receiverName;
     private String receiverPhone;
     private String receiverAddress;

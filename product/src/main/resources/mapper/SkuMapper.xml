@@ -9,26 +9,201 @@
         <result property="name" column="name"/>
         <result property="description" column="description"/>
         <result property="price" column="price"/>
+        <result property="marketPrice" column="market_price"/>
         <result property="stock" column="stock"/>
+        <result property="stockThreshold" column="stock_threshold"/>
+        <result property="sales" column="sales"/>
+        <result property="fakeSales" column="fake_sales"/>
+        <result property="storeStock" column="store_stock"/>
         <result property="type" column="type"/>
+        <result property="productType" column="product_type"/>
         <result property="images" column="images"/>
         <result property="spec" column="spec"/>
+        <result property="deliveryMethods" column="delivery_methods"/>
+        <result property="sort" column="sort"/>
         <result property="status" column="status"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
+        <result property="displaySales" column="display_sales"/>
     </resultMap>
 
     <insert id="insert" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO tb_sku (shop_id, category_id, name, description, price, stock, type, images, spec, status)
-        VALUES (#{shopId}, #{categoryId}, #{name}, #{description}, #{price}, #{stock}, #{type}, #{images}, #{spec}, #{status})
+        INSERT INTO tb_sku (shop_id, category_id, name, description, price, market_price, stock, stock_threshold,
+                            sales, fake_sales, store_stock, type, product_type, images, spec, delivery_methods, sort, status)
+        VALUES (#{shopId}, #{categoryId}, #{name}, #{description}, #{price}, #{marketPrice}, #{stock}, #{stockThreshold},
+                #{sales}, #{fakeSales}, #{storeStock}, #{type}, #{productType}, #{images}, #{spec}, #{deliveryMethods}, #{sort}, #{status})
     </insert>
 
     <select id="selectById" resultMap="SkuResultMap">
         SELECT * FROM tb_sku WHERE id = #{id}
     </select>
 
+    <select id="countStockAlertByShopId" resultType="int">
+        SELECT COUNT(*)
+        FROM tb_sku
+        WHERE shop_id = #{shopId}
+          AND stock &lt; stock_threshold
+    </select>
+
     <update id="updateStatus">
         UPDATE tb_sku SET status = #{status}, updated_at = CURRENT_TIMESTAMP WHERE id = #{id}
     </update>
 
+    <!-- ==== 店铺商品管理 shopId 强制隔离（功能上下文 2.2）：以下 SQL 恒带 shop_id 条件 ==== -->
+
+    <select id="selectByIdWithinShop" resultMap="SkuResultMap">
+        SELECT * FROM tb_sku WHERE id = #{id} AND shop_id = #{shopId}
+    </select>
+
+    <select id="selectByShopId" resultMap="SkuResultMap">
+        SELECT * FROM tb_sku WHERE shop_id = #{shopId}
+    </select>
+
+    <update id="updateStatusWithinShop">
+        UPDATE tb_sku SET status = #{status}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id} AND shop_id = #{shopId}
+    </update>
+
+    <!-- 动态更新：只回写非空字段；不含 shop_id（防“搬店”）、sales（真实销量只由 MQ 回写）、status（走上下架接口） -->
+    <update id="updateSkuWithinShop">
+        UPDATE tb_sku
+        <set>
+            <if test="po.categoryId != null">category_id = #{po.categoryId},</if>
+            <if test="po.name != null">name = #{po.name},</if>
+            <if test="po.description != null">description = #{po.description},</if>
+            <if test="po.price != null">price = #{po.price},</if>
+            <if test="po.marketPrice != null">market_price = #{po.marketPrice},</if>
+            <if test="po.stock != null">stock = #{po.stock},</if>
+            <if test="po.stockThreshold != null">stock_threshold = #{po.stockThreshold},</if>
+            <if test="po.fakeSales != null">fake_sales = #{po.fakeSales},</if>
+            <if test="po.storeStock != null">store_stock = #{po.storeStock},</if>
+            <if test="po.type != null">type = #{po.type},</if>
+            <if test="po.productType != null">product_type = #{po.productType},</if>
+            <if test="po.images != null">images = #{po.images},</if>
+            <if test="po.spec != null">spec = #{po.spec},</if>
+            <if test="po.deliveryMethods != null">delivery_methods = #{po.deliveryMethods},</if>
+            <if test="po.sort != null">sort = #{po.sort},</if>
+            updated_at = CURRENT_TIMESTAMP
+        </set>
+        WHERE id = #{po.id} AND shop_id = #{shopId}
+    </update>
+
+    <delete id="deleteWithinShop">
+        DELETE FROM tb_sku WHERE id = #{id} AND shop_id = #{shopId}
+    </delete>
+
+    <!-- ==== 商品列表动态条件筛选（功能上下文 3.1）：shop_id 恒带；name 裸关键词模糊；其余等值；delivery 多选命中任一 ==== -->
+
+    <sql id="listFilter">
+        WHERE shop_id = #{shopId}
+        <if test="name != null and name != ''">
+            AND name LIKE '%' || #{name} || '%'
+        </if>
+        <if test="productType != null">
+            AND product_type = #{productType}
+        </if>
+        <if test="type != null">
+            AND type = #{type}
+        </if>
+        <if test="status != null">
+            AND status = #{status}
+        </if>
+        <if test="categoryId != null">
+            AND category_id = #{categoryId}
+        </if>
+        <if test="deliveryMethods != null and deliveryMethods.size() > 0">
+            AND (
+            <foreach collection="deliveryMethods" item="dm" separator=" OR ">
+                delivery_methods LIKE '%' || #{dm} || '%'
+            </foreach>
+            )
+        </if>
+    </sql>
+
+    <!-- 动态条件分页查询：sort DESC（越大越靠前），同 sort 按 id DESC 稳定排序 -->
+    <select id="selectPage" resultMap="SkuResultMap">
+        SELECT * FROM tb_sku
+        <include refid="listFilter"/>
+        ORDER BY sort DESC, id DESC
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <!-- 条件命中总数（total 不受分页影响） -->
+    <select id="countByFilter" resultType="int">
+        SELECT COUNT(*) FROM tb_sku
+        <include refid="listFilter"/>
+    </select>
+
+    <!-- 导出数据组装（功能上下文 5.1）：与列表共用同一筛选构建器与排序，取全量不分页 -->
+    <select id="selectAllByFilter" resultMap="SkuResultMap">
+        SELECT * FROM tb_sku
+        <include refid="listFilter"/>
+        ORDER BY sort DESC, id DESC
+    </select>
+
+    <!-- 导入更新（功能上下文 6.1）：恒带 id + shop_id 双条件；sales 不动（以 DB/事件为准） -->
+    <update id="updateImportWithinShop">
+        UPDATE tb_sku SET
+            name = #{po.name},
+            market_price = #{po.marketPrice},
+            price = #{po.price},
+            fake_sales = #{po.fakeSales},
+            stock = #{po.stock},
+            store_stock = #{po.storeStock},
+            product_type = #{po.productType},
+            type = #{po.type},
+            status = #{po.status},
+            delivery_methods = #{po.deliveryMethods},
+            sort = #{po.sort},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{po.id} AND shop_id = #{shopId}
+    </update>
+
+    <!-- 批量设置（功能上下文 4.1）：只回写 po 中非空字段（统一设为固定值），shop_id 恒带隔离 -->
+    <update id="batchUpdateWithinShop">
+        UPDATE tb_sku
+        <set>
+            <if test="po.status != null">status = #{po.status},</if>
+            <if test="po.deliveryMethods != null">delivery_methods = #{po.deliveryMethods},</if>
+            <if test="po.categoryId != null">category_id = #{po.categoryId},</if>
+            <if test="po.sort != null">sort = #{po.sort},</if>
+            <if test="po.stock != null">stock = #{po.stock},</if>
+            <if test="po.storeStock != null">store_stock = #{po.storeStock},</if>
+            updated_at = CURRENT_TIMESTAMP
+        </set>
+        WHERE shop_id = #{shopId}
+        AND id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </update>
+
+    <!-- 真实销量回写（功能上下文 8.1）：累加非覆盖；去重表主键冲突返回 0 表示重复投递 -->
+    <update id="incrementSales">
+        UPDATE tb_sku SET sales = sales + #{quantity} WHERE id = #{skuId}
+    </update>
+    <insert id="insertProcessedEvent">
+        INSERT OR IGNORE INTO tb_processed_event (order_id) VALUES (#{orderId})
+    </insert>
+
+    <!-- ==== C 端商品卡片列表（功能上下文 2.2）：恒强制 status=1、不带 shop_id、categoryName 可选跨店过滤 ==== -->
+
+    <sql id="mallFilter">
+        WHERE status = 1
+        <if test="categoryName != null and categoryName != ''">
+            AND category_id IN (SELECT id FROM tb_category WHERE name = #{categoryName} AND status = 1)
+        </if>
+    </sql>
+
+    <select id="selectMallPage" resultMap="SkuResultMap">
+        SELECT *, (sales + COALESCE(fake_sales, 0)) AS display_sales FROM tb_sku
+        <include refid="mallFilter"/>
+        ORDER BY ${sortBy.sql}
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <select id="countMallByFilter" resultType="int">
+        SELECT COUNT(*) FROM tb_sku
+        <include refid="mallFilter"/>
+    </select>
 </mapper>

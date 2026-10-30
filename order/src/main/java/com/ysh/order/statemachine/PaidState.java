@@ -23,6 +23,11 @@ public class PaidState implements OrderState {
     }
 
     @Override
+    public OrderState cancel() {
+        throw new IllegalStateException("订单已付款，请申请退款，不能取消");
+    }
+
+    @Override
     public OrderStatusEnum getStatus() {
         return OrderStatusEnum.PAID;
     }

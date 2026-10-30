@@ -5,17 +5,89 @@
 
     <insert id="insert" parameterType="com.ysh.order.dao.po.OrderPO" useGeneratedKeys="true" keyProperty="id">
         INSERT INTO tb_order (order_no, shop_id, sku_id, sku_name, quantity, total_price,
-                              status, receiver_name, receiver_phone, receiver_address)
+                              status, receiver_name, receiver_phone, receiver_address, buyer_username,
+                              shop_name, sku_image, shop_phone, unit_price)
         VALUES (#{orderNo}, #{shopId}, #{skuId}, #{skuName}, #{quantity}, #{totalPrice},
-                #{status}, #{receiverName}, #{receiverPhone}, #{receiverAddress})
+                #{status}, #{receiverName}, #{receiverPhone}, #{receiverAddress}, #{buyerUsername},
+                #{shopName}, #{skuImage}, #{shopPhone}, #{unitPrice})
     </insert>
 
     <select id="selectById" resultType="com.ysh.order.dao.po.OrderPO">
         SELECT id, order_no, shop_id, sku_id, sku_name, quantity, total_price,
-               status, pay_type, receiver_name, receiver_phone, receiver_address,
-               create_time, update_time
+               status, pay_type, pay_time, receiver_name, receiver_phone, receiver_address,
+               buyer_username, buyer_deleted, buyer_fav, shop_phone,
+               shop_name, sku_image, unit_price,
+               logistics_no, logistics_type, create_time, update_time
         FROM tb_order
         WHERE id = #{id}
+    </select>
+
+    <select id="countByShopIdAndStatus" resultType="int">
+        SELECT COUNT(*)
+        FROM tb_order
+        WHERE shop_id = #{shopId}
+          AND status = #{status}
+    </select>
+
+    <select id="countOngoingRefundsByShopId" resultType="int">
+        SELECT COUNT(*)
+        FROM tb_refund
+        WHERE shop_id = #{shopId}
+          AND status = 'PROCESSING'
+    </select>
+
+    <!-- 商品删除前校验（shop-product-list.md 功能上下文 7.3.1）：任意状态都算「已产生订单」，含未支付 PENDING -->
+    <select id="countBySkuId" resultType="int">
+        SELECT COUNT(*)
+        FROM tb_order
+        WHERE sku_id = #{skuId}
+          AND shop_id = #{shopId}
+    </select>
+
+    <select id="sumPaidAmountByHour" resultType="com.ysh.order.dao.po.HourAmountPO">
+        SELECT CAST(strftime('%H', pay_time) AS INTEGER) AS hour,
+               SUM(total_price) AS amount
+        FROM tb_order
+        WHERE shop_id = #{shopId}
+          AND pay_time &gt;= #{dayStart}
+          AND pay_time &lt; #{dayEnd}
+          AND status IN ('PAID', 'SHIPPED', 'COMPLETED')
+        GROUP BY strftime('%H', pay_time)
+    </select>
+
+    <select id="countPaidOrders" resultType="int">
+        SELECT COUNT(*)
+        FROM tb_order
+        WHERE shop_id = #{shopId}
+          AND pay_time &gt;= #{dayStart}
+          AND pay_time &lt; #{dayEnd}
+          AND status IN ('PAID', 'SHIPPED', 'COMPLETED')
+    </select>
+
+    <select id="countDistinctPaidBuyers" resultType="int">
+        SELECT COUNT(DISTINCT buyer_username)
+        FROM tb_order
+        WHERE shop_id = #{shopId}
+          AND pay_time &gt;= #{dayStart}
+          AND pay_time &lt; #{dayEnd}
+          AND status IN ('PAID', 'SHIPPED', 'COMPLETED')
+    </select>
+
+    <select id="sumPaidAmount" resultType="java.math.BigDecimal">
+        SELECT SUM(total_price)
+        FROM tb_order
+        WHERE shop_id = #{shopId}
+          AND pay_time &gt;= #{dayStart}
+          AND pay_time &lt; #{dayEnd}
+          AND status IN ('PAID', 'SHIPPED', 'COMPLETED')
+    </select>
+
+    <select id="sumRefundAmount" resultType="java.math.BigDecimal">
+        SELECT SUM(amount)
+        FROM tb_refund
+        WHERE shop_id = #{shopId}
+          AND create_time &gt;= #{dayStart}
+          AND create_time &lt; #{dayEnd}
     </select>
 
     <update id="updateStatus">
@@ -23,9 +95,195 @@
         SET status = #{status},
             <if test="payType != null">
                 pay_type = #{payType},
+                pay_time = datetime('now', 'localtime'),
             </if>
             update_time = datetime('now', 'localtime')
         WHERE id = #{id}
     </update>
+
+    <!-- 发货专用：更新状态 + 物流单号 + 物流类型（shop-order-list.md 功能上下文 7.1.1） -->
+    <update id="updateShipStatus">
+        UPDATE tb_order
+        SET status = #{status},
+            logistics_no = #{logisticsNo},
+            logistics_type = #{logisticsType},
+            update_time = datetime('now', 'localtime')
+        WHERE id = #{id}
+    </update>
+
+    <!-- ===== 登录态强制隔离（shop-order-list.md 功能上下文 2.3）：身份条件恒写入 WHERE ===== -->
+
+    <select id="selectByIdAndShopId" resultType="com.ysh.order.dao.po.OrderPO">
+        SELECT id, order_no, shop_id, sku_id, sku_name, quantity, total_price,
+               status, pay_type, pay_time, receiver_name, receiver_phone, receiver_address,
+               buyer_username, logistics_no, logistics_type, create_time, update_time
+        FROM tb_order
+        WHERE id = #{id}
+          AND shop_id = #{shopId}
+    </select>
+
+    <update id="updateStatusByIdAndShopId">
+        UPDATE tb_order
+        SET status = #{status},
+            update_time = datetime('now', 'localtime')
+        WHERE id = #{id}
+          AND shop_id = #{shopId}
+    </update>
+
+    <select id="selectByIdAndBuyerUsername" resultType="com.ysh.order.dao.po.OrderPO">
+        SELECT id, order_no, shop_id, sku_id, sku_name, quantity, total_price,
+               status, pay_type, pay_time, receiver_name, receiver_phone, receiver_address,
+               buyer_username, logistics_no, logistics_type, create_time, update_time
+        FROM tb_order
+        WHERE id = #{id}
+          AND buyer_username = #{buyerUsername}
+          AND buyer_deleted = 0
+    </select>
+
+    <update id="softDeleteByBuyer">
+        UPDATE tb_order
+        SET buyer_deleted = 1,
+            update_time = datetime('now', 'localtime')
+        WHERE id = #{id}
+          AND buyer_username = #{buyerUsername}
+          AND buyer_deleted = 0
+    </update>
+
+    <update id="favByBuyer">
+        UPDATE tb_order
+        SET buyer_fav = 1,
+            update_time = datetime('now', 'localtime')
+        WHERE id = #{id}
+          AND buyer_username = #{buyerUsername}
+          AND buyer_deleted = 0
+    </update>
+
+    <update id="unfavByBuyer">
+        UPDATE tb_order
+        SET buyer_fav = 0,
+            update_time = datetime('now', 'localtime')
+        WHERE id = #{id}
+          AND buyer_username = #{buyerUsername}
+          AND buyer_deleted = 0
+    </update>
+<!-- ===== 商家端订单列表分页 + 多维筛选（shop-order-list.md 功能上下文 5.1）=====
+     selectPage 与 countByFilter 共用同一 WHERE 片段，保证计数与列表同源不漂移。
+     shop_id 恒取自 filter.shopId（登录上下文注入），不可省略；null 时 SQL 比较为 NULL 即零命中。 -->
+    <sql id="orderQueryWhere">
+        <where>
+            AND o.shop_id = #{filter.shopId}
+            <if test="filter.orderNo != null">
+                AND o.order_no = #{filter.orderNo}
+            </if>
+            <if test="filter.orderType != null and filter.orderType != ''">
+                AND o.order_type = #{filter.orderType}
+            </if>
+            <if test="filter.orderCategory != null and filter.orderCategory != ''">
+                AND o.order_category = #{filter.orderCategory}
+            </if>
+            <if test="filter.status != null and filter.status != ''">
+                AND o.status = #{filter.status}
+            </if>
+            <if test="filter.receiverName != null and filter.receiverName != ''">
+                AND o.receiver_name LIKE '%' || #{filter.receiverName} || '%'
+            </if>
+            <if test="filter.receiverPhone != null and filter.receiverPhone != ''">
+                AND o.receiver_phone LIKE '%' || #{filter.receiverPhone} || '%'
+            </if>
+            <if test="filter.payType != null and filter.payType != ''">
+                AND o.pay_type = #{filter.payType}
+            </if>
+            <!-- 售后状态派生自 tb_refund：EXISTS 子查询避免 JOIN 导致一单多条退款单时行重复 -->
+            <if test="filter.refundStatus != null and filter.refundStatus != ''">
+                <choose>
+                    <when test="filter.refundStatus == 'NONE'">
+                        AND NOT EXISTS (SELECT 1 FROM tb_refund r WHERE r.order_id = o.id)
+                    </when>
+                    <when test="filter.refundStatus == 'PROCESSING' or filter.refundStatus == 'DONE'">
+                        AND EXISTS (SELECT 1 FROM tb_refund r
+                                    WHERE r.order_id = o.id
+                                      AND r.status = #{filter.refundStatus})
+                    </when>
+                    <otherwise>
+                        AND 1 = 0
+                    </otherwise>
+                </choose>
+            </if>
+            <if test="filter.logisticsType != null and filter.logisticsType != ''">
+                AND o.logistics_type = #{filter.logisticsType}
+            </if>
+            <if test="filter.storeName != null and filter.storeName != ''">
+                AND o.store_name = #{filter.storeName}
+            </if>
+            <if test="filter.startDate != null and filter.startDate != ''">
+                AND o.create_time &gt;= #{filter.startDate} || ' 00:00:00'
+            </if>
+            <if test="filter.endDate != null and filter.endDate != ''">
+                AND o.create_time &lt;= #{filter.endDate} || ' 23:59:59'
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectPage" resultType="com.ysh.order.dao.po.OrderPO">
+        SELECT o.id, o.order_no, o.shop_id, o.sku_id, o.sku_name, o.quantity, o.total_price,
+               o.status, o.pay_type, o.order_type, o.order_category, o.logistics_type, o.logistics_no,
+               o.store_name, o.shop_name, o.sku_image, o.unit_price, o.is_gift, o.buyer_deleted,
+               o.buyer_username, o.receiver_name, o.receiver_phone, o.receiver_address,
+               o.create_time, o.update_time
+        FROM tb_order o
+        <include refid="orderQueryWhere"/>
+        ORDER BY o.create_time DESC, o.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countByFilter" resultType="int">
+        SELECT COUNT(*)
+        FROM tb_order o
+        <include refid="orderQueryWhere"/>
+    </select>
+
+    <!-- ===== 买家端订单列表 + 状态计数（shop-order-list.md 功能上下文 10.1）=====
+         buyer_username 恒置 + buyer_deleted=0 恒置；status 可选等值；order_no 精确；
+         selectBuyerPage 与 countBuyerByFilter 共用同一 WHERE 片段保证计数与列表同源。
+         username 为 null 时比较为 NULL 即零命中，不退化全表。 -->
+    <sql id="buyerQueryWhere">
+        <where>
+            AND o.buyer_username = #{filter.buyerUsername}
+            AND o.buyer_deleted = 0
+            <if test="filter.status != null and filter.status != ''">
+                AND o.status = #{filter.status}
+            </if>
+            <if test="filter.orderNo != null and filter.orderNo != ''">
+                AND o.order_no = #{filter.orderNo}
+            </if>
+        </where>
+    </sql>
+
+    <select id="selectBuyerPage" resultType="com.ysh.order.dao.po.OrderPO">
+        SELECT o.id, o.order_no, o.shop_id, o.sku_id, o.sku_name, o.quantity, o.total_price,
+               o.status, o.pay_type, o.order_type, o.order_category, o.logistics_type, o.logistics_no,
+               o.store_name, o.shop_name, o.sku_image, o.unit_price, o.is_gift, o.buyer_deleted,
+               o.buyer_fav, o.shop_phone,
+               o.buyer_username, o.receiver_name, o.receiver_phone, o.receiver_address,
+               o.create_time, o.update_time
+        FROM tb_order o
+        <include refid="buyerQueryWhere"/>
+        ORDER BY o.create_time DESC, o.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countBuyerByFilter" resultType="int">
+        SELECT COUNT(*)
+        FROM tb_order o
+        <include refid="buyerQueryWhere"/>
+    </select>
+
+    <select id="countBuyerStatuses" resultType="com.ysh.order.dao.po.BuyerStatusCountPO">
+        SELECT status AS status, COUNT(*) AS count
+        FROM tb_order
+        WHERE buyer_username = #{buyerUsername}
+          AND buyer_deleted = 0
+        GROUP BY status
+    </select>
 
 </mapper>

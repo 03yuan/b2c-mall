@@ -5,7 +5,8 @@ package com.ysh.order.enums;
  */
 public enum PayTypeEnum {
     ALIPAY,  // 支付宝
-    WECHAT;  // 微信
+    WECHAT,  // 微信
+    BALANCE; // 余额
 
     public static PayTypeEnum fromString(String value) {
         if (value == null || value.trim().isEmpty()) {

@@ -1,157 +1,152 @@
-# TDD 任务拆解：C 端用户用户名密码注册
+# 用户注册功能 TDD 拆解文档（user-service）
 
 ## 需求概述
 
-在电商系统中新增 C 端消费者注册能力：用户在注册界面输入用户名、密码和确认密码，系统校验通过后创建账号。注册成功不自动登录，用户随后自行登录。
+C 端用户使用用户名 + 密码注册账号。注册成功后返回 userId（不自动登录，用户需再调 POST /user/login 获取 token）。用户名全局唯一，重复注册返回明确错误；用户名/密码不符合规则时返回 400 中文提示。
 
-已确认的边界决策：
+**架构背景**：与登录功能同一线程（见 `user-login.md`）。请求经 Spring Cloud Gateway（`/user/**` 路由已配置）转发至 user-service 8086，分层结构：`web`（Controller + VOs + 全局异常处理）→ `service` → `dao/mapper` + `dao/po` → SQLite（user.db）。注册流程**不涉及 Redis/token**，比登录少一个缓存上下文。
 
-| 决策点 | 结论 |
-| --- | --- |
-| 用户名规则 | 仅校验非空 + 全局唯一（已存在则提示），不卡长度和字符类型 |
-| 密码规则 | 仅校验非空 + 两次输入一致，不卡强度 |
-| 注册后行为 | 只返回成功，不自动登录（不签发 token） |
-| 注册字段 | 用户名 + 密码 + 确认密码（昵称等后续在个人中心完善） |
-| 密码存储 | 明文存储（与登录功能的明文比对约定一致） |
-| 新账号状态 | 默认 status=1（正常），可直接登录 |
+**已确认的决策**：
+- 注册字段：username、password 必填；nickname 选填，不填时默认取用户名
+- 注册成功后仅返回 userId，不签发 token
+- 校验规则：用户名 3-20 位字母/数字/下划线；密码 6-20 位；不符返回 400 中文提示
+- 密码明文存储（与 user.sql 种子数据、登录比对口径一致）
+- 注册路径 `/user/register` 需新增到网关鉴权白名单（当前白名单只有 `/user/login`）
 
-架构形态：Spring Cloud 微服务（gateway + user + shop + employee + product + order + common），user 服务内 MVC 分层（Controller/Service/Mapper/PO），独立 SQLite 库 user.db 的 tb_user 表，网关 WhiteUrlFilter 白名单放行注册接口。代码风格遵循项目约定：学生级实现、无注释。
-
----
-
-## 功能点 1：用户输入合法信息可以注册成功
-
-- 功能上下文 1.1：View 层 — 注册界面
-
-  - 任务项 1.1.1：注册界面展示用户名输入框、密码输入框、确认密码输入框和注册按钮
-    - 测试思路：断言注册页渲染后存在用户名、密码、确认密码三个输入框及注册按钮的 DOM 元素
-  - 任务项 1.1.2：密码和确认密码输入时以掩码形式显示
-    - 测试思路：断言密码和确认密码两个输入框的 `type` 属性都为 `password`
-  - 任务项 1.1.3：点击注册按钮时将用户名和密码提交到 `/user/register`
-    - 测试思路：Mock 后端接口，模拟填写表单并点击，断言发出的请求为 POST `/user/register`，请求体含 username 和 password 字段
-
-- 功能上下文 1.2：Controller 层（UserController）— 接收并转发注册请求
-
-  - 任务项 1.2.1：定义注册接口 `POST /user/register`，接收请求体中的 username、password、confirmPassword
-    - 测试思路：MockMvc 发起合法 JSON 请求，断言返回 HTTP 200 且响应体符合 BaseResponseVO 结构（status/message/data 字段齐全）
-  - 任务项 1.2.2：注册成功时返回新用户的 userId（或其他成功标识），不返回 token
-    - 测试思路：Mock Service 返回新用户 id，断言响应 data 为该 id（或含 userId 字段），且响应体中不含 token 字段
-  - 任务项 1.2.3：注册参数通过 `@Valid` + 请求 VO（UserRegisterRequestVO）做非空校验
-    - 测试思路：发起 username 或 password 为空串的请求，断言返回 HTTP 400 且 message 提示对应"不能为空"（Fail 边界）；完整参数请求返回 200（Pass 边界）
-
-- 功能上下文 1.3：Service 层（UserService/UserServiceImpl）— 注册核心逻辑
-
-  - 任务项 1.3.1：校验密码与确认密码一致
-    - 测试思路：分别用不一致（"123456" vs "666666"）和一致的密码调用注册，断言不一致时抛"两次输入的密码不一致"异常（Fail 边界），一致时进入后续流程（Pass 边界）
-  - 任务项 1.3.2：按用户名查重，已存在则拒绝注册
-    - 测试思路：Mock Mapper 查询返回已存在用户 PO，断言抛"用户名已存在"异常（Fail 边界）；返回 null 时正常继续（Pass 边界）
-  - 任务项 1.3.3：组装新用户并写入数据库（status=1，密码明文）
-    - 测试思路：Mock Mapper 的 save 方法，捕获入参 PO，断言 username 与请求一致、password 为请求明文、status=1，且 save 被调用恰好一次
-  - 任务项 1.3.4：返回新用户的 id
-    - 测试思路：Mock save 方法回填 id 后，断言 login()/register() 返回值就是该 id（验证返回值来源为入库结果而非内存构造）
-
-- 功能上下文 1.4：DAO 层（UserMapper + UserPO + user.db）— 用户数据存取
-
-  - 任务项 1.4.1：实现 `insert(UserPO)` 写入 tb_user
-    - 测试思路：对测试用 user.db 执行 insert 后按 id 查询，断言各字段与入参一致（Pass 边界）；必填字段缺失时断言插入失败抛 SQL 异常（Fail 边界）
-  - 任务项 1.4.2：`selectByUsername` 在用户不存在时返回 null
-    - 测试思路：查询数据库中不存在的用户名，断言返回 null
+**对登录文档的依赖（不重复拆解）**：
+- user 模块脚手架（pom、UserApplication、application.yml、tb_user 校验）见 `user-login.md` 功能点 0
+- `UserMapper.selectByUsername` 见 `user-login.md` 任务项 1.3.2（注册的唯一性预检复用它）
+- 全局异常处理器（业务异常 400、非法 JSON 400）见 `user-login.md` 功能上下文 1.5，注册直接复用，不新建
 
 ---
 
-## 功能点 2：用户名已被占用时不允许注册
+## 功能点 1：注册路径经网关白名单放行（网关配置）
 
-- 功能上下文 2.1：Service 层 — 查重失败分支
+### 功能上下文 1.1：网关层（gateway/application.yml）
 
-  - 任务项 2.1.1：用户名已存在时抛"用户名已存在"异常，不执行插入
-    - 测试思路：Mock 查询返回已有用户，断言抛出 message 为"用户名已存在"的异常，且 Mapper 的 insert 方法零调用（未写库）
-  - 任务项 2.1.2：查重按精确匹配（大小写敏感，与登录查询口径一致）
-    - 测试思路：库里有 "test"，用 "test" 注册断言失败；用 "Test" 注册断言通过（说明查重是精确匹配且与登录共用同一查询口径）
-
-- 功能上下文 2.2：DAO 层 — 唯一性兜底
-
-  - 任务项 2.2.1：tb_user.username 建唯一索引，重复插入在数据库层被拒绝
-    - 测试思路：向测试库连续插入两条相同 username 的记录，断言第二条抛唯一约束冲突异常（验证应用层查重失效时数据库兜底）
-
-- 功能上下文 2.3：Controller 层 — 查重失败响应
-
-  - 任务项 2.3.1：用户名已存在时经全局异常处理返回 400"用户名已存在"
-    - 测试思路：Mock Service 抛"用户名已存在"，MockMvc 发请求断言 HTTP 400、message 为"用户名已存在"、结构与 BaseResponseVO 一致
-
-- 功能上下文 2.4：View 层 — 查重失败提示
-
-  - 任务项 2.4.1：注册失败时在界面上提示"用户名已存在"，停留在注册页
-    - 测试思路：Mock 注册接口返回错误响应，点击注册后断言页面出现"用户名已存在"提示，当前路由仍为注册页
+- 任务项 1.1.1：在 `b2c.auth.white-urls` 中新增 `/user/register` 条目
+  - 测试思路：端到端验证：不携带 Authorization 头经网关 8081 请求 POST /user/register → 不被 AuthFilter 拦截（非 401）。Fail 边界：白名单漏配，网关直接 401，注册请求到不了 user-service
 
 ---
 
-## 功能点 3：注册参数非法时被拒绝（不进入业务逻辑）
+## 功能点 2：用户提交合法信息可以注册成功
 
-- 功能上下文 3.1：Service 层 — 密码一致性校验
+### 功能上下文 2.1：Controller 层（web/UserController + web/request/RegisterRequestVO）
 
-  - 任务项 3.1.1：密码与确认密码不一致时抛"两次输入的密码不一致"，不查库不插入
-    - 测试思路：用不一致的两次密码调用，断言异常 message 为"两次输入的密码不一致"，且 Mapper 的查询和插入方法都零调用（校验在最前置）
+- 任务项 2.1.1：提供 `POST /user/register` 接口，接收 JSON 请求体 RegisterRequestVO（username、password、nickname 三个字段，nickname 可为 null）
+  - 测试思路：MockMvc 发起 POST /user/register（合法请求体）→ 断言 HTTP 200。Fail 边界：未实现路由时返回 404
 
-- 功能上下文 3.2：Controller 层 — 参数校验
+- 任务项 2.1.2：注册成功响应的 data 为新建用户的 userId（正整数）
+  - 测试思路：成功响应的 JSON 断言 data 为非空整数（如 1、2…），与测试库中插入记录的 id 一致。Fail 边界：返回 null 或 0 时说明 insert 未回填自增主键
 
-  - 任务项 3.2.1：username 为空（null/空串）返回 400"用户名不能为空"，Service 零调用
-    - 测试思路：发起 username 为空的请求，断言返回 400、message 为"用户名不能为空"，verify Service 层 register 方法零调用
-  - 任务项 3.2.2：password 为空返回 400"密码不能为空"，Service 零调用
-    - 测试思路：发起 password 为空的请求，断言返回 400、message 为"密码不能为空"，Service 零调用
-  - 任务项 3.2.3：请求体不是合法 JSON 时返回 400 而非 500
-    - 测试思路：发送格式错误的 JSON 请求体，断言 HTTP 400（而非 500），全局异常处理器兜底生效（复用登录功能修复的 HttpMessageNotReadableException 处理）
+### 功能上下文 2.2：Service 层（service/UserService + service/impl/UserServiceImpl）
 
-- 功能上下文 3.3：View 层 — 前端必填校验
+- 任务项 2.2.1：用户名唯一性预检：先 `selectByUsername`，命中已有用户时拒绝注册
+  - 测试思路：mock mapper 的 selectByUsername 返回已有 UserPO → 断言抛业务异常且 mapper 的 insert 从未被调用（verify zero interactions）。Fail 边界：跳过预检直接 insert 时，重复用户名依赖数据库唯一索引报 500
 
-  - 任务项 3.3.1：用户名、密码、确认密码任一为空时点击注册，前端拦截并提示，不发起请求
-    - 测试思路：留空任一表单项点击注册，断言 Mock 的注册接口未被调用，页面出现必填提示
+- 任务项 2.2.2：组装 UserPO 写入字段：password 明文存储、nickname 为 null 时默认取 username、avatarUrl 默认 `/avatars/default.png`、status 置 1
+  - 测试思路：mock mapper，断言传给 insert 的 PO：password 与请求一致、nickname 正确回填、avatarUrl 与 status 为默认值。Fail 边界：nickname 回填逻辑缺失时入库为 null，后续登录响应 nickname 为空
 
----
+- 任务项 2.2.3：调用 `UserMapper.insert(po)` 落库并返回自增主键作为 userId
+  - 测试思路：mock mapper.insert 返回 1 且回填 po.id=5 → 断言 register 方法返回 5。Fail 边界：返回 mapper 的行数（1）而非 po.getId()（5），导致 userId 恒为 1
 
-## 功能点 4：注册接口本身无需登录即可访问（网关放行）
+### 功能上下文 2.3：数据访问层（dao/mapper/UserMapper + resources/mapper/UserMapper.xml）
 
-- 功能上下文 4.1：网关层（gateway 的 WhiteUrlFilter + application.yml）— 白名单配置
-
-  - 任务项 4.1.1：在 `b2c.auth.white-urls` 白名单中加入 `/user/register`
-    - 测试思路：不带 Authorization 头请求 `/user/register`，断言请求被放行至 user-service（返回业务响应而非 401）
-  - 任务项 4.1.2：白名单只放行注册接口本身，`/user/**` 其他接口仍需鉴权
-    - 测试思路：不带 token 请求受保护接口断言 401（验证白名单未过度放行的 Fail 边界）；与 `/user/login` 一样只放行精确路径
+- 任务项 2.3.1：UserMapper 提供 `insert(UserPO)`，SQL 配置 `useGeneratedKeys="true" keyProperty="id"`，自增主键回填到 PO
+  - 测试思路：真实 SQLite 临时库执行 insert → 断言 po.getId() 非空且递增，再用 selectByUsername 能查回同一条记录。Fail 边界：未开 useGeneratedKeys 时 po.getId() 为 null
 
 ---
 
-## 功能点 5：注册成功后账号可直接登录（与登录功能衔接）
+## 功能点 3：重复用户名不能注册
 
-- 功能上下文 5.1：Service 层 — 注册与登录的数据约定
+### 功能上下文 3.1：Controller + Service 层（唯一性失败分支）
 
-  - 任务项 5.1.1：注册写入的密码为明文，登录的明文比对可直接通过
-    - 测试思路：用 register() 写入的 PO（密码明文）Mock 给登录流程，用相同明文密码调用 login() 断言登录成功（Pass 边界）；用错误密码断言登录失败（Fail 边界）
-  - 任务项 5.1.2：新账号 status=1，注册后立即可登录，不被"账号已禁用"拦截
-    - 测试思路：断言注册入参 PO 的 status=1；将该 PO 交给登录流程断言不抛"账号已禁用"
+- 任务项 3.1.1：用户名已存在 → 抛出带文案「用户名已存在」的业务异常，HTTP 400
+  - 测试思路：测试库预置用户名 `test`（种子数据）→ 再次用 `test` 注册 → 断言 HTTP 400、message=「用户名已存在」。Fail 边界：文案含糊（如「注册失败」）时前端无法提示用户换名
+
+- 任务项 3.1.2：唯一性由应用层预检 + 数据库唯一索引双重保障，索引兜底异常同样转为「用户名已存在」而非 500
+  - 测试思路：模拟绕过预检的场景，让 insert 抛唯一约束冲突 → 断言全局异常兜底后返回 400「用户名已存在」。Fail 边界：并发下预检双双通过，insert 冲突异常未被捕获，用户看到 500 而不是可读提示
+
+- 任务项 3.1.3：重复注册失败时不产生任何脏数据
+  - 测试思路：失败后断言测试库中该 username 仍只有预置的一条记录。Fail 边界：先 insert 后校验的实现顺序会插出第二条记录
+
+---
+
+## 功能点 4：字段不符合规则不能注册
+
+### 功能上下文 4.1：Controller 层（请求体参数校验）
+
+- 任务项 4.1.1：username 校验：必填，3-20 位，仅字母/数字/下划线（`@NotBlank` + `@Pattern(regexp = "^[a-zA-Z0-9_]{3,20}$")`）
+  - 测试思路：分别发送空/2 位/21 位/含中文或特殊字符的 username → 断言 HTTP 400 且 message 含中文提示。Fail 边界：正则写反边界（如 `{0,20}`）时超长用户名穿透到服务层
+
+- 任务项 4.1.2：password 校验：必填，6-20 位（`@NotBlank` + `@Size(min = 6, max = 20)`）
+  - 测试思路：发送 5 位、21 位、空 password → 断言 HTTP 400。Fail 边界：只做 @NotBlank 时 5 位弱密码也能注册
+
+- 任务项 4.1.3：nickname 选填，但传入时不超过 50 字符（tb_user.nickname 为 VARCHAR(50)）
+  - 测试思路：传 51 字符 nickname → 断言 HTTP 400；不传 nickname → 正常注册且入库 nickname 取用户名。Fail 边界：不限制长度时超长 nickname 入库抛 SQL 异常返回 500
+
+- 任务项 4.1.4：参数校验失败的响应不调用 Service 层
+  - 测试思路：mock Service，校验失败请求 → verify service 零调用。Fail 边界：校验放 Service 内部手工 if 判断时，Controller 测试覆盖不到的分支会漏掉
+
+### 功能上下文 4.2：全局异常处理（复用 login 文档 1.5，仅验证）
+
+- 任务项 4.2.1：校验失败（MethodArgumentNotValidException）→ HTTP 400 + 中文提示
+  - 测试思路：任一非法输入请求 → 断言 HTTP 400，message 非空。Fail 边界：handler 未覆盖该校验异常时返回 500
+
+- 任务项 4.2.2：畸形 JSON 请求体 → HTTP 400（与登录共用 handler 的既有行为）
+  - 测试思路：发送 `{"username":` 畸形 JSON → 断言 HTTP 400。Fail 边界：注册上前不验证该场景会误以为 handler 被登录独占而回归
+
+---
+
+## 功能点 5：注册成功后可登录（验证型功能点，依赖登录功能已完成）
+
+### 功能上下文 5.1：跨功能闭环（注册 → 登录）
+
+- 任务项 5.1.1：用注册时相同的 username/password 调用 POST /user/login 能登录成功并返回 token
+  - 测试思路：端到端验证：注册新账号 → 立即调登录接口 → 断言 HTTP 200 且返回 token（说明注册写入的密码格式与登录比对口径一致）。Fail 边界：注册写入了某种编码/加密而登录按明文比对（或反之），闭环断裂
 
 ---
 
 ## 架构与重构思考
 
-- 组件间关系分析：
+### 组件间关系分析
 
-  注册链路：`View(注册页) → Gateway(WhiteUrlFilter) → user-service Controller → Service → Mapper → user.db`。与登录功能共用同一个 user-service 和 tb_user 表，是天然的"一读一写"配对（登录读、注册写）。
+```
+客户端 → Gateway 8081
+          └─ WhiteUrlFilter：/user/register 白名单（本功能新增）
+                ↓ /user/register
+        user-service 8086
+          UserController（@Valid/@Pattern/@Size 输入边界校验）
+            → UserServiceImpl（selectByUsername 预检 → 组装 PO → insert）
+                └─ UserMapper → SQLite user.db（tb_user，username 唯一索引兜底）
+        （无 Redis 参与——注册不签发 token）
+```
 
-  潜在耦合点：
+关键耦合点：
 
-  1. **查重 + 插入不是原子操作**：并发注册同名用户名时，两个请求都可能通过查重再双双插入。tb_user 的唯一索引（任务项 2.2.1）是数据库层兜底，但应用层需要捕获唯一约束冲突异常并转成"用户名已存在"，否则并发场景会冒出 500。建议在 Service 插入失败分支处理 DuplicateKeyException/SQLException。
-  2. **注册和登录的"用户不存在/密码错误/用户名已存在"等文案分散在 Service 各处硬编码**，后续若加改密码、找回密码等功能会重复。测试通过后可把错误文案收敛为常量类。
-  3. **确认密码（confirmPassword）是纯交互概念**：它只用于注册表单的一致性校验，不应该落库。放在 UserRegisterRequestVO 而非 UserPO，保持 VO 与 PO 关注点分离——VO 是"用户提交了什么"，PO 是"数据库存什么"。
+1. **注册与登录共享「密码」契约，是最危险的隐性耦合**：注册写入的密码格式必须与登录比对口径永久一致。注册写明文、登录比明文（当前决策）；若未来引入 BCrypt 而只改注册不改登录，则所有存量用户全线登录失败。
+   - 重构方向：与 `user-login.md` 重构思考第 2 条合并——引入 PasswordMatcher 接口（明文实现），注册的「写」与登录的「比」都过同一接口，测试一并断言闭环（功能点 5.1 正是这个契约的守护测试）。换加密算法时只改一个实现类。
 
-- 架构对上下文划分的影响：
+2. **唯一性预检与数据库唯一索引的责任分工**：预检负责友好文案（可测试、快），唯一索引负责并发兜底（不可绕过）。二者缺一不可。
+   - 重构方向：唯一约束冲突的异常转换（3.1.2 的兜底）建议收敛到全局异常处理器或 mapper 层的单一 catch 点，避免每个插入业务各自写一遍 try-catch。
 
-  1. **微服务独立库使 DAO 成为独立上下文**：tb_user 的唯一索引是数据库层的正确性保证，与 Service 层查重是两道防线，必须分开测试（功能点 2 把 2.1 Service 查重和 2.2 DAO 唯一索引拆开正是此意）。
-  2. **网关白名单是独立关注点**：注册接口免登录（功能点 4）与注册业务逻辑（功能点 1-3）正交，配置在 gateway 而非 user-service，所以单独成块。
-  3. **View 与 Controller 校验不可互相替代**：前端拦截（3.3）是体验，后端 @Valid（3.2）是安全边界——构造绕过前端的直接请求时只有后端校验兜底。
-  4. **"注册成功可直接登录"（功能点 5）是跨功能的契约测试**：注册和登录是两个独立功能点，但密码存储格式是它们之间的数据契约，必须有测试锁住，否则单方改动（比如某天有人给登录加回加密）会静默破坏另一方。
+3. **注册与登录对 UserMapper 的复用**：selectByUsername 由登录文档定义、注册复用；insert 为本功能新增。两个 TDD 文档存在执行顺序依赖。
+   - 重构方向：文档交叉依赖本身无害，但实现时注意 UserService 同时承载 register 与 login 两个职责后，若继续加「修改密码」「查询资料」会膨胀——届时按「命令/查询」或按用例拆 Service（如 RegisterService / LoginService），测试随职责迁移，本轮不提前拆（YAGNI）。
 
-- 测试通过后的重构方向：
+4. **校验规则的载体选择**：用户名/密码规则固化在 Controller 层注解的正则里，属于输入边界契约。
+   - 重构方向：若后续出现第二个需要校验用户名的接口（如「修改用户名」「找回密码」），把正则提取为 common 或 user 模块的常量/工具，避免正则漂移导致同一系统内规则不一致。
 
-  1. **注册查重 + 插入收敛为"注册用例"整体**：若并发问题实测暴露，可在 Service 里捕获唯一索引冲突异常统一转"用户名已存在"，把数据库兜底和应用层文案对齐。
-  2. **错误文案常量化**：`用户名已存在`、`两次输入的密码不一致`、`用户名或密码错误` 等收敛到 UserErrorMessages 常量类（或枚举），测试与实现引用同一处，避免文案漂移。
-  3. **未来加邮箱/手机号注册时**：注册校验流程（格式校验 → 查重 → 写库）可抽模板方法，与登录的复用思路一致（参考 user-login.md 中的 AuthTokenService 重构方向），差异化步骤只在"账号格式规则"和"账号字段"。
-  4. **明文密码是阶段性约定**：若后续恢复加密，注册侧加密写入 + 登录侧密文比对必须同批修改，功能点 5 的契约测试（5.1.1）就是这次改动的安全网。
+5. **网关白名单的膨胀趋势**：每次新增公开接口都要改 gateway 配置（`/user/login`、`/user/register`…）。
+   - 重构方向：暂维持显式列举（安全默认拒绝）；当公开接口超过约 10 条时，可改为白名单 + 通配前缀托管（如集中维护一份 user-service 公开路径清单），但需评估误放行风险，本轮不做。
+
+### 架构对上下文划分的影响
+
+- **Controller 层（2.1 / 4.1）**：注册的对外契约是「接什么、拒什么」——参数存在性、格式规则（@Pattern/@Size）、响应形状都在这里固化，用 MockMvc 断言，且要求校验失败时 Service 零调用（4.1.4），把「输入合法性」和「业务规则」的边界钉死。
+- **Service 层（2.2 / 3.1）**：唯一性、回填默认值（nickname/avatar/status）、主键回填转发都是业务规则，mock Mapper 后穷举分支——这是注册功能红绿循环的主战场。
+- **数据访问层（2.3）**：insert + 自增主键回填是 MyBatis 行为，只能靠真实 SQLite 验证（临时库）；与 Service 隔离后，业务测试不依赖数据库状态。
+- **网关层单独成功能点（1.1）**：放行配置虽是一行 YAML，但它是「用户可感知」功能的必经之路，漏配时功能整体不可用，必须作为独立验收点存在。
+- **跨功能闭环（功能点 5）**：注册的最终价值在「注册后能登录」，端到端验证放在最后一个功能点，作为两个文档契约一致性的守护。
+
+### TDD 执行顺序建议
+
+功能点 1（网关白名单，配置先行）→ 功能点 2.1 的 Controller 验收测试（红）→ 2.3 DAO insert（真实库验证）→ 2.2 Service（mock 验证）→ 2.1 转绿 → 功能点 3 重复分支（预检 + 兜底）→ 功能点 4 校验规则边界 → 功能点 5 闭环验证（需登录功能已实现）。每个任务项独立走「红 → 绿 → 重构」小循环；功能点 2.2.2/2.2.3 属于同一 service 方法内的不同断言面，应在一个绿循环内逐条点亮断言，而不是拆成多次实现。

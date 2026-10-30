@@ -69,6 +69,13 @@
             <artifactId>hutool-all</artifactId>
         </dependency>
 
+        <!-- EasyExcel：商品列表导出/导入（功能上下文 5.x/6.x），导出表头与导入模板共用列定义 -->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>easyexcel</artifactId>
+            <version>3.3.4</version>
+        </dependency>
+
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-core</artifactId>
@@ -91,6 +98,14 @@
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-ui</artifactId>
+        </dependency>
+
+        <!-- 测试依赖：JUnit5 + MockMvc，仅测试阶段使用 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <version>${spring-boot.version}</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

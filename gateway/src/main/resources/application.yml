@@ -51,11 +51,13 @@ b2c:
     white-urls:
       - /shop/register
       - /shop/login
+      - /user/register
+      - /user/login
       - /employee/save
       - /employee/login
       - /product/create
+      - /product/mall/**
       - /order/create
-      - /user/login
       - /swagger-ui.html
       - /swagger-ui/**
       - /v3/api-docs/**

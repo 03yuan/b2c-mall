@@ -15,7 +15,9 @@ public class OrderStateFactory {
             OrderStatusEnum.PENDING, new PendingState(),
             OrderStatusEnum.PAID, new PaidState(),
             OrderStatusEnum.SHIPPED, new ShippedState(),
-            OrderStatusEnum.COMPLETED, new CompletedState()
+            OrderStatusEnum.COMPLETED, new CompletedState(),
+            OrderStatusEnum.FAILED, new FailedState(),
+            OrderStatusEnum.GROUP_PENDING, new GroupPendingState()
     );
 
     /**

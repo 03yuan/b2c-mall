@@ -32,4 +32,13 @@ public class CreateOrderRequest {
 
     @NotBlank(message = "收货地址不能为空")
     private String receiverAddress;
+
+    /** 店铺名称（下单快照，可选） */
+    private String shopName;
+
+    /** 商品图片（下单快照，可选） */
+    private String skuImage;
+
+    /** 店铺电话（下单快照，可选） */
+    private String shopPhone;
 }

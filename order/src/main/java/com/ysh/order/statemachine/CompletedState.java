@@ -23,6 +23,11 @@ public class CompletedState implements OrderState {
     }
 
     @Override
+    public OrderState cancel() {
+        throw new IllegalStateException("订单已完成，不能取消");
+    }
+
+    @Override
     public OrderStatusEnum getStatus() {
         return OrderStatusEnum.COMPLETED;
     }
