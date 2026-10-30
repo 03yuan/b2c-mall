@@ -1,10 +1,9 @@
 package com.ysh.b2cmall.product.web.controller;
 
 import com.ysh.b2cmall.common.response.BaseResponseVO;
+import com.ysh.b2cmall.product.component.CreateProductComponentRegistry;
 import com.ysh.b2cmall.product.component.CreateProductTemplate;
-import com.ysh.b2cmall.product.component.PhysicalProductComponent;
 import com.ysh.b2cmall.product.component.RequestHolderComponent;
-import com.ysh.b2cmall.product.component.VirtualProductComponent;
 import com.ysh.b2cmall.product.dao.po.SkuPO;
 import com.ysh.b2cmall.product.service.SkuService;
 import com.ysh.b2cmall.product.web.request.CreateProductRequest;
@@ -30,10 +29,7 @@ import java.util.Map;
 public class ProductController {
 
     @Autowired
-    private PhysicalProductComponent physicalProductComponent;
-
-    @Autowired
-    private VirtualProductComponent virtualProductComponent;
+    private CreateProductComponentRegistry componentRegistry;
 
     /** TDD 红阶段占位依赖（功能上下文 2.2）：shopId 一律取登录上下文，忽略请求参数 */
     private final SkuService skuService;
@@ -53,16 +49,11 @@ public class ProductController {
 
     /**
      * 新建商品
-     * 根据 type 分发到实物/虚拟商品模板
+     * 按 type 从注册表取模板（模板方法模式），Controller 不再关心类型映射细节
      */
     @PostMapping("/create")
     public BaseResponseVO<Map<String, Object>> create(@RequestBody @Validated CreateProductRequest req) {
-        CreateProductTemplate template;
-        if (Integer.valueOf(2).equals(req.getType())) {
-            template = virtualProductComponent;
-        } else {
-            template = physicalProductComponent;
-        }
+        CreateProductTemplate template = componentRegistry.get(req.getType());
         Integer skuId = template.create(req);
 
         Map<String, Object> data = new HashMap<>();

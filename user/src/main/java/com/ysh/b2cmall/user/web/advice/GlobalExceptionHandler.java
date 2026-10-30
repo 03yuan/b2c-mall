@@ -1,5 +1,6 @@
 package com.ysh.b2cmall.user.web.advice;
 
+import com.ysh.b2cmall.common.exception.BizException;
 import com.ysh.b2cmall.common.response.BaseResponseVO;
 import com.ysh.b2cmall.user.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +30,13 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "请求体格式错误");
     }
 
+    /** 统一业务异常（BusinessException 为其子类）：按异常携带的状态码直接返回 */
+    @ExceptionHandler(BizException.class)
+    public ResponseEntity<BaseResponseVO<Void>> handleBiz(BizException ex) {
+        return build(HttpStatus.valueOf(ex.getStatus()), ex.getMessage());
+    }
+
+    /** 业务校验异常（兼容旧调用方） */
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<BaseResponseVO<Void>> handleBusiness(BusinessException ex) {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage());

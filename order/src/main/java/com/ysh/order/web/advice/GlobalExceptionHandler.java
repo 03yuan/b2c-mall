@@ -1,5 +1,6 @@
 package com.ysh.order.web.advice;
 
+import com.ysh.b2cmall.common.exception.BizException;
 import com.ysh.b2cmall.common.response.BaseResponseVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -48,6 +49,12 @@ public class GlobalExceptionHandler {
                 ? "分页参数格式不正确（" + name + " 必须为整数）"
                 : "请求参数格式不正确（" + name + "）";
         return build(HttpStatus.BAD_REQUEST, message);
+    }
+
+    /** 统一业务异常：按异常携带的状态码直接返回，不再靠消息文本猜码 */
+    @ExceptionHandler(BizException.class)
+    public ResponseEntity<BaseResponseVO<Void>> handleBiz(BizException ex) {
+        return build(HttpStatus.valueOf(ex.getStatus()), ex.getMessage());
     }
 
     /** 业务校验异常（Assert、手动抛出）：含“不存在”按 404，其余按 400 */

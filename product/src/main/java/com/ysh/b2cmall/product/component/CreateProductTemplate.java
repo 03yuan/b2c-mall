@@ -1,6 +1,6 @@
 package com.ysh.b2cmall.product.component;
 
-import cn.hutool.core.lang.Assert;
+import com.ysh.b2cmall.common.exception.BizException;
 import com.ysh.b2cmall.product.bean.CurrentEmployeeBean;
 import com.ysh.b2cmall.product.dao.mapper.CategoryMapper;
 import com.ysh.b2cmall.product.dao.po.CategoryPO;
@@ -70,12 +70,24 @@ public abstract class CreateProductTemplate {
      * 1. 参数校验（通用，子类可覆盖做更严格校验）
      */
     protected void validateParams(CreateProductRequest req) {
-        Assert.notNull(req.getShopId(), "店铺ID不能为空");
-        Assert.notNull(req.getCategoryId(), "类目ID不能为空");
-        Assert.notBlank(req.getName(), "商品名称不能为空");
-        Assert.notNull(req.getPrice(), "价格不能为空");
-        Assert.isTrue(req.getPrice().compareTo(BigDecimal.ZERO) > 0, "价格必须大于0");
-        Assert.notNull(req.getType(), "商品类型不能为空");
+        if (req.getShopId() == null) {
+            throw BizException.badRequest("店铺ID不能为空");
+        }
+        if (req.getCategoryId() == null) {
+            throw BizException.badRequest("类目ID不能为空");
+        }
+        if (req.getName() == null || req.getName().trim().isEmpty()) {
+            throw BizException.badRequest("商品名称不能为空");
+        }
+        if (req.getPrice() == null) {
+            throw BizException.badRequest("价格不能为空");
+        }
+        if (req.getPrice().compareTo(BigDecimal.ZERO) <= 0) {
+            throw BizException.badRequest("价格必须大于0");
+        }
+        if (req.getType() == null) {
+            throw BizException.badRequest("商品类型不能为空");
+        }
     }
 
     /**
@@ -83,7 +95,9 @@ public abstract class CreateProductTemplate {
      */
     protected void validateCategory(CreateProductRequest req) {
         CategoryPO category = categoryMapper.selectById(req.getCategoryId());
-        Assert.notNull(category, "类目不存在");
+        if (category == null) {
+            throw BizException.notFound("类目不存在");
+        }
     }
 
     /**
@@ -119,6 +133,11 @@ public abstract class CreateProductTemplate {
     }
 
     // ===================== 抽象步骤（子类实现） =====================
+
+    /**
+     * 0. 声明本组件支持的商品类型（模板注册表据此建立映射）
+     */
+    protected abstract ProductType supportType();
 
     /**
      * 3. 价格库存校验（实物/虚拟差异化）
